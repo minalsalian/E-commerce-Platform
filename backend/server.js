@@ -13,6 +13,29 @@ app.use(express.json());
 
 // -------- DATABASE INITIALIZATION --------
 
+// Add phone and address columns to users table if they don't exist
+db.query(
+  "ALTER TABLE users ADD COLUMN phone VARCHAR(30) NULL",
+  (err) => {
+    if (err && err.code !== "ER_DUP_FIELDNAME") {
+      console.log("Add phone column:", err.message);
+    } else {
+      console.log("✓ Phone column ready");
+    }
+  }
+);
+
+db.query(
+  "ALTER TABLE users ADD COLUMN address VARCHAR(255) NULL",
+  (err) => {
+    if (err && err.code !== "ER_DUP_FIELDNAME") {
+      console.log("Add address column:", err.message);
+    } else {
+      console.log("✓ Address column ready");
+    }
+  }
+);
+
 // Add stock column to product table if it doesn't exist
 db.query(`
   ALTER TABLE product ADD COLUMN IF NOT EXISTS stock INT DEFAULT 0
@@ -224,6 +247,40 @@ app.post("/api/categories", (req, res) => {
   });
 });
 
+// Update category
+app.put("/api/categories/:id", (req, res) => {
+  const { id } = req.params;
+  const { cname, name, description = "" } = req.body;
+  const updatedName = cname || name;
+
+  if (!updatedName) {
+    return res.status(400).json({ msg: "Category name is required" });
+  }
+
+  const sqlCname = "UPDATE category SET cname = ?, description = ? WHERE id = ?";
+  const sqlName = "UPDATE category SET name = ?, description = ? WHERE id = ?";
+
+  db.query(sqlCname, [updatedName, description, id], (err) => {
+    if (err) {
+      if (err.code === "ER_BAD_FIELD_ERROR") {
+        db.query(sqlName, [updatedName, description, id], (err2) => {
+          if (err2) {
+            console.log("UPDATE CATEGORY ERROR (fallback):", err2.message);
+            return res.status(500).json({ msg: err2.message || "Error updating category" });
+          }
+          return res.json({ msg: "Category updated successfully" });
+        });
+        return;
+      }
+
+      console.log("UPDATE CATEGORY ERROR:", err.message);
+      return res.status(500).json({ msg: err.message || "Error updating category" });
+    }
+
+    res.json({ msg: "Category updated successfully" });
+  });
+});
+
 app.delete("/api/categories/:id", (req, res) => {
   const { id } = req.params;
 
@@ -261,20 +318,32 @@ app.put("/api/users/:id", (req, res) => {
   const { id } = req.params;
   const { name, email, phone, address } = req.body;
 
-  const sql = "UPDATE users SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?";
-  
-  db.query(sql, [name, email, phone, address, id], (err) => {
+  // Check if email already exists for another user
+  db.query("SELECT id FROM users WHERE email = ? AND id != ?", [email, id], (err, rows) => {
     if (err) {
-      console.log("UPDATE USER ERROR:", err);
-      return res.status(500).json({ msg: "Error updating user" });
+      console.log("EMAIL CHECK ERROR:", err);
+      return res.status(500).json({ msg: "Error checking email" });
     }
 
-    // Fetch updated user
-    db.query("SELECT id, name, email, role, phone, address FROM users WHERE id = ?", [id], (err, rows) => {
+    if (rows.length > 0) {
+      return res.status(400).json({ msg: "Email already exists" });
+    }
+
+    const sql = "UPDATE users SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?";
+    
+    db.query(sql, [name, email, phone, address, id], (err) => {
       if (err) {
-        return res.status(500).json({ msg: "Error fetching updated user" });
+        console.log("UPDATE USER ERROR:", err);
+        return res.status(500).json({ msg: "Error updating user" });
       }
-      res.json(rows[0]);
+
+      // Fetch updated user
+      db.query("SELECT id, name, email, role, phone, address FROM users WHERE id = ?", [id], (err, rows) => {
+        if (err) {
+          return res.status(500).json({ msg: "Error fetching updated user" });
+        }
+        res.json(rows[0]);
+      });
     });
   });
 });
@@ -559,6 +628,26 @@ app.post("/api/products", (req, res) => {
       res.json({ msg: "Product added" });
     }
   );
+});
+
+// Update product basic details
+app.put("/api/products/:id", (req, res) => {
+  const { id } = req.params;
+  const { pname, description, price, stock, categoryid } = req.body;
+
+  if (!pname || !price || !categoryid) {
+    return res.status(400).json({ msg: "Missing required fields" });
+  }
+
+  const sql = "UPDATE product SET pname = ?, description = ?, price = ?, stock = ?, categoryid = ? WHERE id = ?";
+
+  db.query(sql, [pname, description || "", price, stock || 0, categoryid, id], (err) => {
+    if (err) {
+      console.log("UPDATE PRODUCT ERROR:", err);
+      return res.status(500).json({ msg: "Error updating product" });
+    }
+    res.json({ msg: "Product updated successfully" });
+  });
 });
 
 app.delete("/api/products/:id", (req, res) => {
@@ -920,22 +1009,64 @@ app.put("/api/orders/:orderId/status", (req, res) => {
 
   console.log("UPDATE ORDER STATUS:", { orderId, status });
 
-  if (!["Pending", "Approved", "Dispatched", "Delivered"].includes(status)) {
+  if (!["Pending", "Approved", "Dispatched", "Delivered", "Cancelled"].includes(status)) {
     return res.status(400).json({ msg: "Invalid status" });
   }
 
-  db.query(
-    "UPDATE orders SET status = ? WHERE order_id = ?",
-    [status, orderId],
-    (err) => {
-      if (err) {
-        console.log("UPDATE STATUS ERROR:", err);
-        return res.status(500).json({ msg: "Error updating status" });
-      }
-      console.log("ORDER STATUS UPDATED:", orderId, "->", status);
-      res.json({ msg: "Order status updated successfully" });
+  db.query("SELECT status FROM orders WHERE order_id = ?", [orderId], (err, rows) => {
+    if (err) {
+      console.log("ORDER STATUS FETCH ERROR:", err);
+      return res.status(500).json({ msg: "Error fetching order" });
     }
-  );
+    if (rows.length === 0) {
+      return res.status(404).json({ msg: "Order not found" });
+    }
+
+    const previousStatus = rows[0].status;
+
+    db.query(
+      "UPDATE orders SET status = ? WHERE order_id = ?",
+      [status, orderId],
+      (err) => {
+        if (err) {
+          console.log("UPDATE STATUS ERROR:", err);
+          return res.status(500).json({ msg: "Error updating status" });
+        }
+
+        const shouldRestock = status === "Cancelled" && previousStatus !== "Cancelled";
+        if (!shouldRestock) {
+          console.log("ORDER STATUS UPDATED:", orderId, "->", status);
+          return res.json({ msg: "Order status updated successfully" });
+        }
+
+        db.query(
+          "SELECT product_id, SUM(quantity) AS qty FROM order_transactions WHERE order_id = ? GROUP BY product_id",
+          [orderId],
+          (err, items) => {
+            if (err) {
+              console.log("RESTOCK FETCH ERROR:", err);
+              return res.json({ msg: "Order cancelled, but restock failed" });
+            }
+
+            items.forEach((item) => {
+              db.query(
+                "UPDATE product SET stock = stock + ? WHERE id = ?",
+                [item.qty, item.product_id],
+                (err) => {
+                  if (err) {
+                    console.log("RESTOCK ERROR:", err);
+                  }
+                }
+              );
+            });
+
+            console.log("ORDER STATUS UPDATED:", orderId, "->", status, "(restocked)");
+            return res.json({ msg: "Order status updated successfully" });
+          }
+        );
+      }
+    );
+  });
 });
 
 // -------- REVIEWS --------
@@ -1251,10 +1382,19 @@ app.get("/api/analytics", (req, res) => {
 
         // Get top selling products
         db.query(
-          `SELECT p.pname, p.image, SUM(ot.quantity) AS total_sold, SUM(ot.quantity * ot.price) AS revenue
+          `SELECT p.pname,
+                  COALESCE(
+                    (SELECT pi.image_url FROM product_images pi
+                     WHERE pi.product_id = p.id
+                     ORDER BY pi.display_order ASC
+                     LIMIT 1),
+                    p.image
+                  ) AS image,
+                  SUM(ot.quantity) AS total_sold,
+                  SUM(ot.quantity * ot.price) AS revenue
            FROM order_transactions ot
            JOIN product p ON ot.product_id = p.id
-           GROUP BY ot.product_id, p.pname, p.image
+           GROUP BY ot.product_id, p.pname, image
            ORDER BY total_sold DESC
            LIMIT 5`,
           (err, rows) => {
@@ -1457,10 +1597,18 @@ app.get("/api/low-stock", (req, res) => {
   const { threshold = 10 } = req.query;
   
   const sql = `
-    SELECT id, pname, description, image, price, stock, categoryid
-    FROM product
-    WHERE stock <= ? AND status = 1
-    ORDER BY stock ASC
+    SELECT p.id, p.pname, p.description,
+           COALESCE(
+             (SELECT pi.image_url FROM product_images pi
+              WHERE pi.product_id = p.id
+              ORDER BY pi.display_order ASC
+              LIMIT 1),
+             p.image
+           ) AS image,
+           p.price, p.stock, p.categoryid
+    FROM product p
+    WHERE p.stock <= ? AND p.status = 1
+    ORDER BY p.stock ASC
   `;
   
   db.query(sql, [threshold], (err, rows) => {

@@ -7,6 +7,19 @@ export default function LowStockAlerts() {
   const [msg, setMsg] = useState("");
   const [threshold, setThreshold] = useState(10);
   const [updatingStock, setUpdatingStock] = useState(null);
+  const placeholderImage = "/images/placeholder.svg";
+  const resolveImage = (image) => {
+    const normalized = String(image || "").trim().toLowerCase();
+    if (!image || normalized === "null" || normalized === "undefined") {
+      return placeholderImage;
+    }
+    if (image.startsWith("http")) return image;
+    if (image.startsWith("/images/")) return image;
+    if (image.startsWith("images/")) return `/${image}`;
+    if (image.startsWith("uploads/")) return `http://localhost:8000/${image}`;
+    if (image.startsWith("/")) return `http://localhost:8000${image}`;
+    return `http://localhost:8000/uploads/${image}`;
+  };
 
   useEffect(() => {
     fetchLowStockProducts();
@@ -172,7 +185,7 @@ export default function LowStockAlerts() {
                   }}
                 >
                   <img
-                    src={product.image}
+                    src={resolveImage(product.image)}
                     alt={product.pname}
                     style={{
                       maxWidth: "100%",
@@ -180,7 +193,7 @@ export default function LowStockAlerts() {
                       objectFit: "cover",
                     }}
                     onError={(e) => {
-                      e.target.src = "/images/placeholder.png";
+                      e.currentTarget.src = placeholderImage;
                     }}
                   />
                 </div>

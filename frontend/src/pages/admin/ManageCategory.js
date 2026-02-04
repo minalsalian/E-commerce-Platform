@@ -5,6 +5,8 @@ export default function ManageCategory() {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState("");
   const [msg, setMsg] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
 
   useEffect(() => {
     fetchCategories();
@@ -45,6 +47,32 @@ export default function ManageCategory() {
     }
   };
 
+  const startEdit = (category) => {
+    setEditingCategoryId(category.id);
+    setEditCategoryName(category.cname || category.name || "");
+    setMsg("");
+  };
+
+  const cancelEdit = () => {
+    setEditingCategoryId(null);
+    setEditCategoryName("");
+  };
+
+  const saveEdit = async (id) => {
+    if (!editCategoryName.trim()) return;
+    try {
+      const res = await axios.put(`http://localhost:8000/api/categories/${id}`, {
+        cname: editCategoryName,
+        description: "",
+      });
+      setMsg(res.data.msg || "Category updated");
+      cancelEdit();
+      fetchCategories();
+    } catch (err) {
+      setMsg(err.response?.data?.msg || "Error updating category");
+    }
+  };
+
   return (
     <div>
       <h1 style={{ marginBottom: "20px" }}>Manage Category</h1>
@@ -77,8 +105,32 @@ export default function ManageCategory() {
           {categories.map((c) => (
             <tr key={c.id}>
               <td style={td}>{c.id}</td>
-              <td style={td}>{c.cname || c.name}</td>
               <td style={td}>
+                {editingCategoryId === c.id ? (
+                  <input
+                    style={input}
+                    value={editCategoryName}
+                    onChange={(e) => setEditCategoryName(e.target.value)}
+                  />
+                ) : (
+                  c.cname || c.name
+                )}
+              </td>
+              <td style={td}>
+                {editingCategoryId === c.id ? (
+                  <>
+                    <button style={saveBtn} onClick={() => saveEdit(c.id)}>
+                      Save
+                    </button>
+                    <button style={cancelBtn} onClick={cancelEdit}>
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button style={editBtn} onClick={() => startEdit(c)}>
+                    Edit
+                  </button>
+                )}
                 <button style={delBtn} onClick={() => deleteCategory(c.id)}>
                   Delete
                 </button>
@@ -130,4 +182,34 @@ const delBtn = {
   border: "none",
   borderRadius: "4px",
   cursor: "pointer",
+};
+
+const editBtn = {
+  padding: "6px 12px",
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  marginRight: "8px",
+};
+
+const saveBtn = {
+  padding: "6px 12px",
+  background: "#10b981",
+  color: "#fff",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  marginRight: "8px",
+};
+
+const cancelBtn = {
+  padding: "6px 12px",
+  background: "#6b7280",
+  color: "#fff",
+  border: "none",
+  borderRadius: "4px",
+  cursor: "pointer",
+  marginRight: "8px",
 };

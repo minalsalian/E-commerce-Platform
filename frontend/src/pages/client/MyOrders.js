@@ -5,6 +5,24 @@ import Breadcrumbs from "../../components/Breadcrumbs";
 
 // Order Timeline Component
 const OrderTimeline = ({ status }) => {
+  if (status === "Cancelled") {
+    return (
+      <div style={{ padding: "20px 0" }}>
+        <div
+          style={{
+            padding: "12px 16px",
+            background: "#fef2f2",
+            color: "#991b1b",
+            borderRadius: 8,
+            fontWeight: 600,
+            textAlign: "center",
+          }}
+        >
+          Order Cancelled
+        </div>
+      </div>
+    );
+  }
   const stages = ["Pending", "Approved", "Dispatched", "Delivered"];
   const currentIndex = stages.indexOf(status);
 
@@ -235,6 +253,8 @@ export default function MyOrders() {
                           ? "#dbeafe"
                           : o.status === "Approved"
                           ? "#fef3c7"
+                          : o.status === "Cancelled"
+                          ? "#f3f4f6"
                           : "#fee2e2",
                       color:
                         o.status === "Delivered"
@@ -243,6 +263,8 @@ export default function MyOrders() {
                           ? "#1e40af"
                           : o.status === "Approved"
                           ? "#92400e"
+                          : o.status === "Cancelled"
+                          ? "#6b7280"
                           : "#991b1b",
                     }}
                   >

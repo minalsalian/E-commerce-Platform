@@ -52,6 +52,8 @@ export default function Orders() {
         return { bg: "#fef3c7", color: "#92400e" };
       case "Pending":
         return { bg: "#fee2e2", color: "#991b1b" };
+      case "Cancelled":
+        return { bg: "#f3f4f6", color: "#6b7280" };
       default:
         return { bg: "#f3f4f6", color: "#374151" };
     }
@@ -277,6 +279,7 @@ export default function Orders() {
                       <option value="Approved">Approved</option>
                       <option value="Dispatched">Dispatched</option>
                       <option value="Delivered">Delivered</option>
+                      <option value="Cancelled">Cancelled</option>
                     </select>
 
                     <button

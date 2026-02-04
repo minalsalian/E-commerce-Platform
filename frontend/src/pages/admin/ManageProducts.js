@@ -14,6 +14,14 @@ export default function ManageProducts() {
   const [imagePreview, setImagePreview] = useState("");
   const [msg, setMsg] = useState("");
   const [expandedVariants, setExpandedVariants] = useState(null);
+  const [editingProductId, setEditingProductId] = useState(null);
+  const [editForm, setEditForm] = useState({
+    pname: "",
+    description: "",
+    price: "",
+    stock: "",
+    categoryid: "",
+  });
 
   useEffect(() => {
     fetchProducts();
@@ -113,6 +121,40 @@ export default function ManageProducts() {
     }
   };
 
+  const startEdit = (product) => {
+    setEditingProductId(product.id);
+    setEditForm({
+      pname: product.pname || "",
+      description: product.description || "",
+      price: product.price || "",
+      stock: product.stock ?? "",
+      categoryid: product.categoryid || "",
+    });
+    setMsg("");
+  };
+
+  const cancelEdit = () => {
+    setEditingProductId(null);
+    setEditForm({ pname: "", description: "", price: "", stock: "", categoryid: "" });
+  };
+
+  const saveEdit = async (id) => {
+    try {
+      await axios.put(`http://localhost:8000/api/products/${id}`, {
+        pname: editForm.pname,
+        description: editForm.description,
+        price: Number(editForm.price),
+        stock: Number(editForm.stock) || 0,
+        categoryid: Number(editForm.categoryid),
+      });
+      setMsg("Product updated");
+      cancelEdit();
+      fetchProducts();
+    } catch (err) {
+      setMsg(err.response?.data?.msg || "Error updating product");
+    }
+  };
+
   return (
     <div>
       <h1 style={{ marginBottom: "20px" }}>Manage Products</h1>
@@ -209,14 +251,44 @@ export default function ManageProducts() {
                     />
                   )}
                 </td>
-                <td style={td}>{p.pname}</td>
-                <td style={td}>{p.price}</td>
+                <td style={td}>
+                  {editingProductId === p.id ? (
+                    <input
+                      style={input}
+                      value={editForm.pname}
+                      onChange={(e) => setEditForm({ ...editForm, pname: e.target.value })}
+                    />
+                  ) : (
+                    p.pname
+                  )}
+                </td>
+                <td style={td}>
+                  {editingProductId === p.id ? (
+                    <input
+                      style={input}
+                      type="number"
+                      value={editForm.price}
+                      onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                    />
+                  ) : (
+                    p.price
+                  )}
+                </td>
                 <td style={{
                   ...td,
                   fontWeight: p.stock <= 5 ? 'bold' : 'normal',
                   color: p.stock === 0 ? '#dc2626' : p.stock <= 5 ? '#ea580c' : p.stock <= 10 ? '#eab308' : '#10b981'
                 }}>
-                  {p.stock || 0}
+                  {editingProductId === p.id ? (
+                    <input
+                      style={input}
+                      type="number"
+                      value={editForm.stock}
+                      onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })}
+                    />
+                  ) : (
+                    p.stock || 0
+                  )}
                 </td>
                 <td style={td}>
                   <button
@@ -225,14 +297,56 @@ export default function ManageProducts() {
                   >
                     {expandedVariants === p.id ? 'Hide' : 'Variants'}
                   </button>
-                  <button
-                    style={delBtn}
-                    onClick={() => deleteProduct(p.id)}
-                  >
+                  {editingProductId === p.id ? (
+                    <>
+                      <button style={saveBtn} onClick={() => saveEdit(p.id)}>
+                        Save
+                      </button>
+                      <button style={cancelBtn} onClick={cancelEdit}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button style={editBtn} onClick={() => startEdit(p)}>
+                      Edit
+                    </button>
+                  )}
+                  <button style={delBtn} onClick={() => deleteProduct(p.id)}>
                     Delete
                   </button>
                 </td>
               </tr>
+              {editingProductId === p.id && (
+                <tr>
+                  <td style={td} colSpan={6}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div>
+                        <label style={{ fontSize: 12, color: "#6b7280" }}>Description</label>
+                        <input
+                          style={input}
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 12, color: "#6b7280" }}>Category</label>
+                        <select
+                          style={input}
+                          value={editForm.categoryid}
+                          onChange={(e) => setEditForm({ ...editForm, categoryid: e.target.value })}
+                        >
+                          <option value="">Select Category *</option>
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name || cat.cname}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {expandedVariants === p.id && (
                 <tr>
                   <td colSpan="6" style={{ padding: 0, border: 'none' }}>
@@ -293,6 +407,36 @@ const delBtn = {
   border: "none",
   borderRadius: 4,
   cursor: "pointer",
+};
+
+const editBtn = {
+  padding: "6px 12px",
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: 4,
+  cursor: "pointer",
+  marginRight: 8,
+};
+
+const saveBtn = {
+  padding: "6px 12px",
+  background: "#10b981",
+  color: "#fff",
+  border: "none",
+  borderRadius: 4,
+  cursor: "pointer",
+  marginRight: 8,
+};
+
+const cancelBtn = {
+  padding: "6px 12px",
+  background: "#6b7280",
+  color: "#fff",
+  border: "none",
+  borderRadius: 4,
+  cursor: "pointer",
+  marginRight: 8,
 };
 
 const variantBtn = {
